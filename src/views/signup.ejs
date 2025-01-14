@@ -1,0 +1,61 @@
+<section class="flex items-center justify-center min-h-screen">
+    <div class="max-w-md w-full bg-white p-8 rounded-lg shadow-lg border border-gray-200">
+        <!-- Header Section -->
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">Sign Up</h2>
+
+        <!-- Form Section -->
+        <form id="signupForm" class="space-y-6">
+            <!-- Username Input -->
+            <div>
+                <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                <input 
+                    class="mt-1 w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    type="text" 
+                    id="username" 
+                    name="username" 
+                    required>
+            </div>
+
+            <!-- Email Input -->
+            <div>
+                <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+                <input 
+                    class="mt-1 w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    type="email" 
+                    id="email" 
+                    name="email" 
+                    required>
+            </div>
+
+            <!-- Password Input -->
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                <input 
+                    class="mt-1 w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    type="password" 
+                    id="password" 
+                    name="password" 
+                    required>
+            </div>
+
+            <!-- Confirm Password Input -->
+            <div>
+                <label for="confirmPassword" class="block text-sm font-medium text-gray-700">Confirm Password</label>
+                <input 
+                    class="mt-1 w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    type="password" 
+                    id="confirmPassword" 
+                    name="confirmPassword" 
+                    required>
+            </div>
+
+            <!-- Submit Button -->
+            <button 
+                type="submit"
+                class="w-full py-3 px-6 bg-blue-500 text-white font-medium text-lg rounded-lg shadow-md hover:bg-blue-600 transition duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+                Sign Up
+            </button>
+        </form>
+    </div>
+</section>

@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head>
+    <title><%= title %></title>
+    <link href="/main.css" rel="stylesheet" />
+    <script src="/js/index.js" defer></script>
+    <script src="/js/logout.js" defer></script>
+    <script src="/js/login.js" defer></script>
+    <script src="/js/signup.js" defer></script>
+    <script src="/js/profile.js" defer></script>
+     <script src="/js/dashboard.js" defer></script>
+  </head>
+  <body>
+    <!-- Header Section -->
+    <%- include('partials/header') %>
+
+
+    <!-- Dynamic Body Section -->
+    <main class="container mx-auto py-8">
+      <%- include(body) %>
+    </main>
+  </body>
+</html>

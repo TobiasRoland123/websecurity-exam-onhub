@@ -1,0 +1,12 @@
+node_modules
+
+# Ignore MySQL database volume
+sql/volume/
+
+# Ignore environment files with credentials
+.env-dev
+.env-prod
+
+.DS_Store
+.idea
+dist

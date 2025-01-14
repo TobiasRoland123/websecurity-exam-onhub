@@ -1,0 +1,105 @@
+---
+stages:
+  - static
+  - build
+  - deploy
+
+static:
+  stage: static
+  image: node:20-alpine
+  before_script:
+    - apk add --no-cache yamllint shellcheck
+    - npm install
+    - npm install -g eslint typescript
+  script:
+    - tsc --noEmit
+    - npx eslint .
+    - yamllint .gitlab-ci.yml
+    - |
+      if find . -type f -name "*.sh" | grep -q . ; then
+        shellcheck *.sh
+      else
+        echo "No shell scripts found."
+      fi
+
+build:
+  stage: build
+  #image: registry.gitlab.com/henrikstroem/composer:latest
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - echo "$CI_JOB_TOKEN" | docker login -u gitlab-ci-token --password-stdin "$CI_REGISTRY"
+  script:
+    - docker build --pull -t "$CI_REGISTRY_IMAGE/instax:latest" .
+    - RTE=test docker-compose --env-file .env-test up --abort-on-container-exit --exit-code-from backend || docker logs backend-container
+    - |
+      if [ "$CI_COMMIT_REF_NAME" == "main" ]; then
+        docker push "$CI_REGISTRY_IMAGE/instax:latest"
+      else
+        echo "Not on main branch, skipping docker push."
+      fi
+
+deploy:
+  stage: deploy
+  image: docker:latest
+  before_script:
+    - apk add --no-cache openssh-client
+    # Start ssh-agent for secure key handling
+    - eval $(ssh-agent -s)
+    # Add private key temporarily to the agent
+    - echo "$SSH_PRIVATE_KEY" | ssh-add -
+    # Create .ssh directory for known_hosts
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    # Trust the VPS host key for the session
+    - ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+    # Authenticate to GitLab Container Registry
+    - echo "$CI_JOB_TOKEN" | docker login -u gitlab-ci-token --password-stdin "$CI_REGISTRY"
+  script:
+    # Pull the latest Docker image from the registry
+    - echo "Pulling the latest Docker image..."
+    - ssh $VPS_USER@$VPS_HOST "docker pull $CI_REGISTRY_IMAGE/instax:latest"
+
+    # Ensure the `main` branch is up to date for production with stashing changes
+    - echo "Stashing any local changes, switching to 'main' branch and pulling the latest code..."
+    - ssh $VPS_USER@$VPS_HOST "
+        cd /home/henrynavntoft/exam/websecurity-exam-2024 &&
+        git stash &&
+        git fetch origin &&
+        git checkout main &&
+        git pull origin main
+      "
+
+    # Stop old containers
+    - echo "Stopping old containers..."
+    - ssh $VPS_USER@$VPS_HOST "
+        cd /home/henrynavntoft/exam/websecurity-exam-2024 &&
+        RTE=prod docker-compose --env-file .env-prod down
+      "
+
+    # Start new containers
+    - echo "Starting new containers..."
+    - ssh $VPS_USER@$VPS_HOST "
+        cd /home/henrynavntoft/exam/websecurity-exam-2024 &&
+        RTE=prod docker-compose --env-file .env-prod up -d
+      "
+
+    # Clean up unused Docker resources for disk space efficiency
+    - echo "Running Docker Cleanup..."
+    - ssh $VPS_USER@$VPS_HOST "
+        docker system prune -af &&
+        docker volume prune -f
+      "
+
+    # Verify running containers for successful deployment
+    - echo "Deployment complete. Running containers:"
+    - ssh $VPS_USER@$VPS_HOST "docker ps -a"
+
+    # Kill ssh-agent after the deployment
+    - eval $(ssh-agent -k)
+  only:
+    - main
+    - 103-bedre-pipeline

@@ -1,0 +1,92 @@
+services:
+  database:
+    image: mysql:latest
+    container_name: database-container
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./sql/scripts:/docker-entrypoint-initdb.d
+      - instax_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "${DB_HOST}"]
+      interval: 30s
+      retries: 5
+      start_period: 60s
+      timeout: 10s
+    networks:
+      - internal
+    restart: unless-stopped
+
+  backend:
+    container_name: backend-container
+    image: registry.gitlab.com/tobiasroland123/websecurity-exam-2024/instax:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVER_PORT: ${SERVER_PORT}
+    env_file:
+      - "./.env-$RTE"
+    ports:
+      - "${SERVER_PORT}:${SERVER_PORT}"
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT}/health"]
+      interval: 30s
+      retries: 5
+      start_period: 60s
+      timeout: 10s
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - internal
+    restart: unless-stopped
+
+  tailwind:
+    image: node:18-alpine
+    container_name: tailwind-container
+    working_dir: /app
+    command: sh -c "npm install && npx tailwindcss -i ./src/public/main.css -o ./src/public/output.css --watch"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - internal
+    stdin_open: true # Keeps STDIN open even if not attached
+    tty: true
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx-container
+    env_file:
+      - "./.env-$RTE"
+    ports:
+      - ${NGINX_PORT}:${NGINX_PORT}
+      - 443:443
+    volumes:
+      - ./nginx.${RTE}.conf:/etc/nginx/nginx.conf # Mount the correct Nginx configuration
+      - /etc/letsencrypt:/etc/letsencrypt:ro # Only for production
+    depends_on:
+      backend:
+        condition: service_healthy
+    entrypoint:
+      [
+        "/bin/sh",
+        "-c",
+        "echo 'All containers are up and running, access website here: http://localhost:${NGINX_PORT}'; nginx -g 'daemon off;'",
+      ]
+    networks:
+      - internal
+    restart: unless-stopped
+
+# The bridge driver creates a private internal network on the host machine, allowing containers connected to this network to communicate with each other while isolating them from external networks
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  instax_db_data:

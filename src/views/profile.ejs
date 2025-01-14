@@ -1,0 +1,78 @@
+<section class="max-w-4xl mx-auto mt-10 p-6 bg-white rounded-lg shadow-lg">
+  <!-- Header Section -->
+  <header class="mb-6 flex items-center justify-between">
+    <h1 class="text-3xl font-bold text-black">
+      <span id="role"></span> Profile
+    </h1>
+    <button
+      id="logoutButton"
+      class="px-6 py-2 bg-red-500 text-white text-sm font-medium rounded-md hover:bg-red-600 focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+    >
+      Logout
+    </button>
+  </header>
+
+  <!-- Main Content -->
+  <main>
+    <section class="space-y-4">
+      <!-- User Information -->
+      <div class="space-y-4 border-t border-gray-200 pt-4">
+        <p class="text-lg">
+          <strong>Username:</strong>
+          <span id="username" class="text-black">Loading...</span>
+        </p>
+        <p class="text-lg">
+          <strong>Email:</strong>
+          <span id="email" class="text-black">Loading...</span>
+        </p>
+      </div>
+
+      <!-- Image Upload Form -->
+      <div class="border-t border-gray-200 pt-6">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Upload an Image</h2>
+        <form id="uploadForm" class="space-y-4">
+          <!-- Caption Input -->
+          <div>
+            <label for="caption" class="block text-sm font-medium text-gray-700">Caption</label>
+            <input
+              type="text"
+              id="caption"
+              name="caption"
+              required
+              class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <!-- File Input -->
+          <div>
+            <label for="image" class="block text-sm font-medium text-gray-700">Choose an Image</label>
+            <input
+              type="file"
+              id="image"
+              name="image"
+              accept="image/*"
+              required
+              class="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+            />
+          </div>
+
+          <!-- Submit Button -->
+          <button
+            type="submit"
+            class="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Upload
+          </button>
+        </form>
+        <p id="message" class="mt-4 text-sm text-gray-700"></p>
+      </div>
+    </section>
+
+    <!-- User Posts Section -->
+        <div class="border-t border-gray-200 pt-6">
+          <h2 class="text-2xl font-bold text-gray-800 mb-4">My Posts</h2>
+          <ul id="user-posts" class="space-y-4"></ul>
+        </div>
+  </main>
+</section>
+
