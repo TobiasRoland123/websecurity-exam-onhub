@@ -38,7 +38,7 @@ router.get('/:id', async (req, res) => {
 
     return res.json(results[0]);
   } catch (error) {
-    console.error(`Error fetching post with id ${req.params.id}:`, error);
+    console.error(`Error fetching post with id:`, error);
     return res.status(500).json({ message: 'Failed to fetch post' });
   }
 });
@@ -86,7 +86,7 @@ router.delete('/:id', authenticateJWT(['customer', 'admin']), async (req, res) =
 
     res.status(200).json({ message: 'Post deleted successfully' });
   } catch (error) {
-    console.error(`Error deleting post with id ${id}:`, error);
+    console.error(`Error deleting post with id:`, error);
     return res.status(500).json({ message: 'Failed to delete post' });
   }
 });

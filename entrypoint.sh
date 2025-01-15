@@ -1,5 +1,9 @@
 #!/bin/sh
+
+
 echo "** RTE mode: $RTE"
+
+
 
 case "$RTE" in
     dev)
@@ -12,10 +16,8 @@ case "$RTE" in
         ;;
     prod)
         echo "=== Production Mode ==="
-        npm run start
-        ;;
-    *)
-        echo "=== Unknown Mode ==="
-        exit 1
+        npm run start                                                                                                     
         ;;
 esac
+
+

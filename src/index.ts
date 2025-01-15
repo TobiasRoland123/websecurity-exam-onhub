@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import path from 'path';
 import morgan from 'morgan';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 
 
 
@@ -24,6 +25,14 @@ import uploadRoutes from './routes/upload';
 // Initialize Express app
 const app = express();
 
+// Prevent browser caching globally for all routes
+app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+});
+
 // Middleware
 app.use(express.json());
 app.use(cookieParser());
@@ -31,30 +40,56 @@ app.use(cookieParser());
 // Global Middleware to Set Login and Role Information
 app.use(authenticateJWT()); // No roles specified, just populates res.locals
 
-// CORS
-const isProduction = process.env.RTE === 'prod';
+// CORS Configuration
+const allowedOrigins = [
+    'https://examproject.xyz',
+    'http://localhost:3005'
+];
+
 const corsOptions = {
-    origin: isProduction ? 'https://examproject.xyz' : 'http://localhost:3005',
-    credentials: true,              // Tillad cookies
-    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Tilladte HTTP-metoder
-    allowedHeaders: ['Content-Type', 'Authorization'], // Tilladte headers
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 app.use(cors(corsOptions));
 
+// Logging (based on environment) with morgan
+const isProduction = process.env.RTE === 'prod';
+const isDevelopment = process.env.RTE === 'dev';
+const isTest = process.env.RTE === 'test';
+
 if (isProduction) {
-    console.log("Running in production mode");
-    // Aktiver produktion-specifikke funktioner
+    app.use(morgan('combined'));
+} else if (isDevelopment) {
+    app.use(morgan('dev'));
+} else if (isTest) {
+    app.use(morgan('tiny'));
 } else {
-    console.log("Running in development mode");
-    // Aktiver debugging eller testfunktioner
+    console.error('Unknown runtime environment (RTE)');
+    process.exit(1);
 }
 
-// Security headers with helmet (all the x-powered-by header comes straight out the box with helmet)
-app.use(helmet());
 
-// Morgan middleware for logging HTTP requests
-app.use(morgan('dev')); 
+// Stricter rate limiting for login
+const loginLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 10,
+    message: 'Too many login attempts. Please try again later.',
+    skipSuccessfulRequests: true,
+});
+
+app.use('/login', loginLimiter);
+
+// General API Rate Limiter
+const generalLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,  // 5 minutes
+    max: 200, 
+    message: 'Too many requests, please try again later.',
+});
+
+app.use(generalLimiter);
 
 // Content Security Policy (CSP) with helmet
 app.use(

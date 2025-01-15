@@ -4,29 +4,39 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import connectToDatabase from '../database';
 import { authenticateJWT } from '../middleware/auth';
+import { validateEmail, validatePassword, validatePasswordMatch, validateUsername } from '../utils/validators';
+
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret_key';
-// const DOMAIN = process.env.DOMAIN || 'http://localhost:3005';
+
+// Ensure JWT secret exists before server starts
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    throw new Error("JWT_SECRET is not defined. Please set it in your .env file.");
+}
+
+const isProduction = process.env.RTE === 'prod';
 
 
 ////////////////////////////////////////////////////////////////////////////////////////
-// Login route to authenticate the user
+// POST: Login route to authenticate the user
 router.post('/login', async (req: Request, res: Response) => {
     const { email, password } = req.body;
 
-    if (!email || !password ) {
-        return res.status(400).json({ message: 'All fields are required.' });
+    // all fields are required
+    if (!email || !password) {
+        return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        return res.status(400).json({ message: 'Invalid email format.' });
+    // Validate inputs using the centralized validators
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+        return res.status(400).json({ message: emailValidation.message });
     }
 
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!-%*?&]{8,}$/;
-    if (!passwordRegex.test(password)) {
-        return res.status(400).json({ message: 'Password must be at least 8 characters long and include at least one letter and one number.' });
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+        return res.status(400).json({ message: passwordValidation.message });
     }
 
     try {
@@ -54,8 +64,6 @@ router.post('/login', async (req: Request, res: Response) => {
             { expiresIn: "1h" }
         );
         
-        const isProduction = process.env.RTE === 'prod';
-
         res.cookie('authToken', token, {
             httpOnly: true,                      // Prevents JavaScript access to the cookie (XSS protection)
             secure: isProduction,                // Only use secure cookies in production
@@ -74,7 +82,59 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 ////////////////////////////////////////////////////////////////////////////////////////
-// Route to get the user details
+// POST: Signup route to create a new user
+router.post('/signup', async (req: Request, res: Response) => {
+    const { username, email, password, confirmPassword } = req.body;
+
+    // Validate inputs using the centralized validators
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+        return res.status(400).json({ message: emailValidation.message });
+    }
+
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+        return res.status(400).json({ message: passwordValidation.message });
+    }
+
+    const passwordMatchValidation = validatePasswordMatch(password, confirmPassword);
+    if (!passwordMatchValidation.valid) {
+        return res.status(400).json({ message: passwordMatchValidation.message });
+    }
+
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+        return res.status(400).json({ message: usernameValidation.message });
+    }
+
+    try {
+        const db = await connectToDatabase();
+
+        const [existingUsers] = await db.execute('SELECT * FROM users WHERE username = ? OR email = ?', [username, email]);
+        if (Array.isArray(existingUsers) && existingUsers.length > 0) {
+            return res.status(409).json({ message: 'Username or email already exists.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        await db.execute('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)', [
+            username,
+            email,
+            hashedPassword,
+            'customer'
+        ]);
+
+        res.status(201).json({ message: 'User registered successfully.' });
+    } catch (error) {
+        console.error('Signup error:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////
+// GET: Route to get the user details
 router.get('/me', authenticateJWT([]), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
@@ -108,63 +168,11 @@ router.get('/me', authenticateJWT([]), async (req: Request, res: Response) => {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////
-// Logout route to clear the auth token
+// POST: Logout route to clear the auth token
 router.post('/logout', (req: Request, res: Response) => {
     res.clearCookie('authToken'); // Clear the cookie
     res.json({ message: 'Logout successful' });
 });
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////
-// Signup route to create a new user
-router.post('/signup', async (req: Request, res: Response) => {
-    const { username, email, password, confirmPassword } = req.body;
-
-    if (!username || !email || !password || !confirmPassword) {
-        return res.status(400).json({ message: 'All fields are required.' });
-    }
-
-    if (password !== confirmPassword) {
-        return res.status(400).json({ message: 'Passwords do not match.' });
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        return res.status(400).json({ message: 'Invalid email format.' });
-    }
-
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!-%*?&]{8,}$/;
-    if (!passwordRegex.test(password)) {
-        return res.status(400).json({ message: 'Password must be at least 8 characters long and include at least one letter and one number.' });
-    }
-
-    try {
-        const db = await connectToDatabase();
-
-        const [existingUsers] = await db.execute('SELECT * FROM users WHERE username = ? OR email = ?', [username, email]);
-        if (Array.isArray(existingUsers) && existingUsers.length > 0) {
-            return res.status(409).json({ message: 'Username or email already exists.' });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        await db.execute('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)', [
-            username,
-            email,
-            hashedPassword,
-            'customer'
-        ]);
-
-        res.status(201).json({ message: 'User registered successfully.' });
-    } catch (error) {
-        console.error('Signup error:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
-    }
-});
-
-
 
 
 export default router;

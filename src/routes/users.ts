@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import connectToDatabase from '../database';
+import { authenticateJWT } from '../middleware/auth';
 
 const router = Router();
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // GET: All users
-router.get('/', async (req, res) => {
+router.get('/', authenticateJWT(['admin']), async (req, res) => {
   try {
     const conn = await connectToDatabase();
     const [results] = await conn.execute('SELECT * FROM users');
@@ -20,7 +21,7 @@ router.get('/', async (req, res) => {
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // DELETE: Delete a user by ID
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', authenticateJWT(['admin']),  async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user?.userId;  // Extract the authenticated user's ID from the token
 
@@ -47,7 +48,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // GET: A specific user by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateJWT(['admin']),  async (req, res) => {
   try {
     const conn = await connectToDatabase();
     const { id } = req.params;
@@ -55,14 +56,14 @@ router.get('/:id', async (req, res) => {
     conn.end();
     return res.json(results);
   } catch (error) {
-    console.error(`Error fetching user with id ${req.params.id}:`, error);
+    console.error(`Error fetching user`, error);
     return res.status(500).json({ message: 'Failed to fetch user' });
   }
 });
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // GET: All posts by a specific user
-router.get('/:id/posts', async (req, res) => {
+router.get('/:id/posts', authenticateJWT(['admin', 'customer']),  async (req, res) => {
   try {
     const conn = await connectToDatabase();
     const { id } = req.params;
@@ -70,7 +71,7 @@ router.get('/:id/posts', async (req, res) => {
     conn.end();
     return res.json(results);
   } catch (error) {
-    console.error(`Error fetching posts for user with id ${req.params.id}:`, error);
+    console.error(`Error fetching posts for user`, error);
     return res.status(500).json({ message: 'Failed to fetch posts' });
   }
 }

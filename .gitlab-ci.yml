@@ -24,8 +24,7 @@ static:
 
 build:
   stage: build
-  #image: registry.gitlab.com/henrikstroem/composer:latest
-  image: docker:latest
+  image: registry.gitlab.com/henrikstroem/composer:latest
   services:
     - docker:dind
   variables:
@@ -35,12 +34,7 @@ build:
   script:
     - docker build --pull -t "$CI_REGISTRY_IMAGE/instax:latest" .
     - RTE=test docker-compose --env-file .env-test up --abort-on-container-exit --exit-code-from backend || docker logs backend-container
-    - |
-      if [ "$CI_COMMIT_REF_NAME" == "main" ]; then
-        docker push "$CI_REGISTRY_IMAGE/instax:latest"
-      else
-        echo "Not on main branch, skipping docker push."
-      fi
+    - docker push "$CI_REGISTRY_IMAGE/instax:latest"
 
 deploy:
   stage: deploy
@@ -102,4 +96,3 @@ deploy:
     - eval $(ssh-agent -k)
   only:
     - main
-    - 103-bedre-pipeline

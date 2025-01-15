@@ -27,8 +27,6 @@ services:
         SERVER_PORT: ${SERVER_PORT}
     env_file:
       - "./.env-$RTE"
-    ports:
-      - "${SERVER_PORT}:${SERVER_PORT}"
     depends_on:
       database:
         condition: service_healthy
@@ -43,6 +41,7 @@ services:
       - /app/node_modules
     networks:
       - internal
+      - external
     restart: unless-stopped
 
   tailwind:
@@ -80,12 +79,15 @@ services:
         "echo 'All containers are up and running, access website here: http://localhost:${NGINX_PORT}'; nginx -g 'daemon off;'",
       ]
     networks:
-      - internal
+      - external
     restart: unless-stopped
 
-# The bridge driver creates a private internal network on the host machine, allowing containers connected to this network to communicate with each other while isolating them from external networks
+# Internal og External gør det muligt at adskille services i forskellige netværk, og derved sikre hvem der kan kommunikere med hinanden.
+# Fx. burde nginx kun kunne kommunikere med backend, og ikke database. Dette giver applikationen et ekstra sikkerhedslag.
 networks:
   internal:
+    driver: bridge
+  external:
     driver: bridge
 
 volumes:

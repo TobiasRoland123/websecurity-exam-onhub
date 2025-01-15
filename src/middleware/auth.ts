@@ -1,37 +1,49 @@
 import type { Request, Response, NextFunction } from 'express';
+import type { JwtPayload } from 'jsonwebtoken';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret_key';
+// Runtime check to ensure the secret is provided
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is not defined.');
+}
 
-// Definerer en ny type, der udvider Request-objektet med et user-felt
+// Defining a clearer user type for better type safety
+interface DecodedUser extends JwtPayload {
+  userId: number;
+  role: string;
+}
+
+// Extending the Express Request object properly with TypeScript
 interface AuthenticatedRequest extends Request {
-  user?: { userId: number; role: string };
+  user?: DecodedUser;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // Middleware - Verify JWT token
 export const authenticateJWT = (roles: string[] = []) => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    const token = req.cookies.authToken;
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    const token = req.cookies?.authToken;
 
     if (!token) {
+      console.warn('No token provided.');
+      res.clearCookie('authToken');
       res.locals.isLoggedIn = false;
       res.locals.role = null;
-      if (roles.length > 0) {
-        // Redirect only if roles are required
-        return res.redirect('/login');
-      }
-      return next();
+      return roles.length > 0 ? res.redirect('/login') : next();
     }
 
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; role: string };
+      const decoded = jwt.verify(token, JWT_SECRET) as DecodedUser;
       req.user = decoded;
       res.locals.isLoggedIn = true;
       res.locals.role = decoded.role;
 
+      // Check role authorization if specific roles are required
       if (roles.length > 0 && !roles.includes(decoded.role)) {
-        return res.redirect('/login');
+        console.warn('Unauthorized access attempt.');
+        res.status(403).send('Unauthorized.');
+        return;
       }
 
       next();
@@ -40,10 +52,7 @@ export const authenticateJWT = (roles: string[] = []) => {
       res.clearCookie('authToken');
       res.locals.isLoggedIn = false;
       res.locals.role = null;
-      if (roles.length > 0) {
-        return res.redirect('/login');
-      }
-      next();
+      return roles.length > 0 ? res.redirect('/login') : next();
     }
   };
 };
