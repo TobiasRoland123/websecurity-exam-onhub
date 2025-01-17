@@ -26,7 +26,6 @@ export const authenticateJWT = (roles: string[] = []) => {
     const token = req.cookies?.authToken;
 
     if (!token) {
-      console.warn('No token provided.');
       res.clearCookie('authToken');
       res.locals.isLoggedIn = false;
       res.locals.role = null;

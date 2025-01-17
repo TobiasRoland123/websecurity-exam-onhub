@@ -1,13 +1,12 @@
-// Entry point for the application
 import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import path from 'path';
 import morgan from 'morgan';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
-
-
+import crypto from 'crypto'; // For token generation
 
 // Import routes
 import routes from './routes';
@@ -22,8 +21,71 @@ import signUpRoutes from './routes/signup';
 import { authenticateJWT } from './middleware/auth';
 import uploadRoutes from './routes/upload';
 
+const isProduction = process.env.RTE === 'prod';
+const isDevelopment = process.env.RTE === 'dev';
+const isTest = process.env.RTE === 'test';
+
+const CSRF_SECRET = process.env.CSRF_SECRET;
+if (!CSRF_SECRET) {
+    throw new Error('CSRF_SECRET is not defined. Please set it in your .env file.');
+}
+
 // Initialize Express app
 const app = express();
+
+// Signed CSRF Token Middleware
+const generateSignedCSRFToken = () => {
+    const csrfToken = crypto.randomBytes(32).toString('hex'); // Generate random token
+    const signature = crypto
+        .createHmac('sha256', CSRF_SECRET)
+        .update(csrfToken)
+        .digest('hex'); // Sign the token
+    return `${csrfToken}.${signature}`; // Return token with signature
+};
+
+const validateSignedCSRFToken = (signedToken: string) => {
+    const [csrfToken, signature] = signedToken.split('.');
+    if (!csrfToken || !signature) return false;
+
+    const expectedSignature = crypto
+        .createHmac('sha256', CSRF_SECRET)
+        .update(csrfToken)
+        .digest('hex'); // Recompute signature
+
+    return signature === expectedSignature; // Validate signature
+};
+
+const attachCSRFToken = (req: Request, res: Response, next: NextFunction) => {
+    if (!req.cookies['csrf-token']) {
+        const signedToken = generateSignedCSRFToken();
+        res.cookie('csrf-token', signedToken, {
+            httpOnly: true, 
+            secure: isProduction? true : false, // Use secure cookies in production
+            sameSite: 'strict',
+        });
+    }
+    next();
+};
+
+const validateCSRFToken = (req: Request, res: Response, next: NextFunction) => {
+    if (req.method === 'GET' || req.method === 'HEAD') {
+        return next(); // Skip validation for non-mutating requests
+    }
+
+    const csrfToken = req.body._csrf || req.headers['x-csrf-token'];
+    const cookieToken = req.cookies['csrf-token'];
+
+    if (!csrfToken || !cookieToken || !validateSignedCSRFToken(cookieToken)) {
+        return res.status(403).json({ message: 'Invalid CSRF token' });
+    }
+
+    const [csrfTokenValue] = cookieToken.split('.');
+    if (csrfToken !== csrfTokenValue) {
+        return res.status(403).json({ message: 'CSRF token mismatch' });
+    }
+
+    next();
+};
 
 // Prevent browser caching globally for all routes
 app.use((req, res, next) => {
@@ -37,28 +99,28 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(cookieParser());
 
+// Attach CSRF Token
+app.use(attachCSRFToken);
+
 // Global Middleware to Set Login and Role Information
 app.use(authenticateJWT()); // No roles specified, just populates res.locals
 
 // CORS Configuration
 const allowedOrigins = [
     'https://examproject.xyz',
-    'http://localhost:3005'
+    'http://localhost:3005',
 ];
 
 const corsOptions = {
     origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'], // Include CSRF header
 };
 
 app.use(cors(corsOptions));
 
 // Logging (based on environment) with morgan
-const isProduction = process.env.RTE === 'prod';
-const isDevelopment = process.env.RTE === 'dev';
-const isTest = process.env.RTE === 'test';
 
 if (isProduction) {
     app.use(morgan('combined'));
@@ -71,11 +133,10 @@ if (isProduction) {
     process.exit(1);
 }
 
-
 // Stricter rate limiting for login
 const loginLimiter = rateLimit({
     windowMs: 5 * 60 * 1000, // 5 minutes
-    max: 10,
+    max: 20,
     message: 'Too many login attempts. Please try again later.',
     skipSuccessfulRequests: true,
 });
@@ -84,8 +145,8 @@ app.use('/login', loginLimiter);
 
 // General API Rate Limiter
 const generalLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000,  // 5 minutes
-    max: 200, 
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 500,
     message: 'Too many requests, please try again later.',
 });
 
@@ -93,24 +154,24 @@ app.use(generalLimiter);
 
 // Content Security Policy (CSP) with helmet
 app.use(
-  helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'none'"], // Only load resources from the same domain
-      scriptSrc: ["'self'"], // Allow scripts with nonce
-      styleSrc: ["'self'"], // Allow styles with nonce
-      fontSrc: ["'self'"], // Only allow fonts from your domain
-      imgSrc: ["'self'", 'data:', 'https://*.linodeobjects.com'], // Allow images from Linode Object Storage
-      connectSrc: ["'self'"], // API calls restricted to self
-      objectSrc: ["'none'"], // Disallow plugins (e.g., Flash)
-      frameSrc: ["'none'"], // Disallow iframe embedding
-      frameAncestors: ["'self'"], // Disallow embedding by other sites
-      baseUri: ["'self'"], // Prevent base tag manipulation
-      formAction: ["'self'"], // Restrict form submissions to the same domain
-      mediaSrc: ["'self'"], // Restrict media (audio/video) to the same domain
-      workerSrc: ["'self'"], // Restrict web workers to the same domain
-      upgradeInsecureRequests: [], // Automatically upgrade HTTP to HTTPS
-    },
-  })
+    helmet.contentSecurityPolicy({
+        directives: {
+            defaultSrc: ["'none'"], // Only load resources from the same domain
+            scriptSrc: ["'self'"], // Allow scripts with nonce
+            styleSrc: ["'self'"], // Allow styles with nonce
+            fontSrc: ["'self'"], // Only allow fonts from your domain
+            imgSrc: ["'self'", 'data:', 'https://*.linodeobjects.com'], // Allow images from Linode Object Storage
+            connectSrc: ["'self'"], // API calls restricted to self
+            objectSrc: ["'none'"], // Disallow plugins (e.g., Flash)
+            frameSrc: ["'none'"], // Disallow iframe embedding
+            frameAncestors: ["'self'"], // Disallow embedding by other sites
+            baseUri: ["'self'"], // Prevent base tag manipulation
+            formAction: ["'self'"], // Restrict form submissions to the same domain
+            mediaSrc: ["'self'"], // Restrict media (audio/video) to the same domain
+            workerSrc: ["'self'"], // Restrict web workers to the same domain
+            upgradeInsecureRequests: [], // Automatically upgrade HTTP to HTTPS
+        },
+    })
 );
 
 // Static files and view engine
@@ -118,6 +179,15 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Attach the CSRF token route
+app.get('/csrf-token', (req, res) => {
+    const signedToken = req.cookies['csrf-token'];
+    if (!signedToken) {
+        return res.status(403).json({ message: 'No CSRF token found' });
+    }
+    const [csrfToken] = signedToken.split('.'); // Extract only the token value
+    res.json({ csrfToken });
+});
 // Routes
 app.use('/', routes);
 app.use('/users', userRoutes);
@@ -125,15 +195,14 @@ app.use('/posts', postRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/profile', profileRoutes);
 app.use('/login', loginRoutes);
-app.use('/auth', authRoutes);
-app.use('/signup', signUpRoutes);
+app.use('/auth', validateCSRFToken, authRoutes); // Add CSRF validation for protected routes
+app.use('/signup', validateCSRFToken, signUpRoutes);
 app.use('/upload', uploadRoutes);
 
 // Health check route for docker
 app.get('/health', (req, res) => {
-  res.status(200).send('OK');
+    res.status(200).send('OK');
 });
-
 
 // Global error handler
 app.use(errorHandler);
@@ -141,6 +210,5 @@ app.use(errorHandler);
 // Start the server
 const PORT = process.env.SERVER_PORT;
 app.listen(PORT, () => {
-  //
-  console.log(`Server is running on port ${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
