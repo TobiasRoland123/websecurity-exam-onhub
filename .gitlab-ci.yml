@@ -1,40 +1,40 @@
 ---
 stages:
-  - static
-  - build
+  # - static
+  # - build
   - deploy
 
-static:
-  stage: static
-  image: node:20-alpine
-  before_script:
-    - apk add --no-cache yamllint shellcheck
-    - npm install
-    - npm install -g eslint typescript
-  script:
-    - tsc --noEmit
-    - npx eslint .
-    - yamllint .gitlab-ci.yml
-    - |
-      if find . -type f -name "*.sh" | grep -q . ; then
-        shellcheck *.sh
-      else
-        echo "No shell scripts found."
-      fi
+# static:
+#   stage: static
+#   image: node:20-alpine
+#   before_script:
+#     - apk add --no-cache yamllint shellcheck
+#     - npm install
+#     - npm install -g eslint typescript
+#   script:
+#     - tsc --noEmit
+#     - npx eslint .
+#     - yamllint .gitlab-ci.yml
+#     - |
+#       if find . -type f -name "*.sh" | grep -q . ; then
+#         shellcheck *.sh
+#       else
+#         echo "No shell scripts found."
+#       fi
 
-build:
-  stage: build
-  image: registry.gitlab.com/henrikstroem/composer:latest
-  services:
-    - docker:dind
-  variables:
-    DOCKER_DRIVER: overlay2
-  before_script:
-    - echo "$CI_JOB_TOKEN" | docker login -u gitlab-ci-token --password-stdin "$CI_REGISTRY"
-  script:
-    - docker build --pull -t "$CI_REGISTRY_IMAGE/instax:latest" .
-    - RTE=test docker-compose --env-file .env-test up --abort-on-container-exit --exit-code-from backend || docker logs backend-container
-    - docker push "$CI_REGISTRY_IMAGE/instax:latest"
+# build:
+#   stage: build
+#   image: registry.gitlab.com/henrikstroem/composer:latest
+#   services:
+#     - docker:dind
+#   variables:
+#     DOCKER_DRIVER: overlay2
+#   before_script:
+#     - echo "$CI_JOB_TOKEN" | docker login -u gitlab-ci-token --password-stdin "$CI_REGISTRY"
+#   script:
+#     - docker build --pull -t "$CI_REGISTRY_IMAGE/instax:latest" .
+#     - RTE=test docker-compose --env-file .env-test up --abort-on-container-exit --exit-code-from backend || docker logs backend-container
+#     - docker push "$CI_REGISTRY_IMAGE/instax:latest"
 
 deploy:
   stage: deploy

@@ -70,7 +70,6 @@ router.post('/login', async (req: Request, res: Response) => {
             sameSite: 'strict',                  // Prevents the cookie from being sent with cross-site requests (CSRF protection)
             maxAge: 3600000,                     // 1 hour in milliseconds
             path: '/',                           // Restrict the cookie to your site's root
-            priority: 'high',                    // Ensure the cookie is sent with every request
         });
 
         // Send a response to indicate success (no need to send token back in JSON)

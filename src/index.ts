@@ -33,7 +33,8 @@ if (!CSRF_SECRET) {
 // Initialize Express app
 const app = express();
 
-// Signed CSRF Token Middleware
+// Double Signed CSRF Token 
+// Generate a signed CSRF token
 const generateSignedCSRFToken = () => {
     const csrfToken = crypto.randomBytes(32).toString('hex'); // Generate random token
     const signature = crypto
@@ -43,6 +44,21 @@ const generateSignedCSRFToken = () => {
     return `${csrfToken}.${signature}`; // Return token with signature
 };
 
+// Attach CSRF token to all requests
+const attachCSRFToken = (req: Request, res: Response, next: NextFunction) => {
+    if (!req.cookies['csrf-token']) {
+        const signedToken = generateSignedCSRFToken();
+        res.cookie('csrf-token', signedToken, {
+            httpOnly: true, 
+            secure: isProduction? true : false, // Use secure cookies in production
+            sameSite: 'strict',
+            path: '/',
+        });
+    }
+    next();
+};
+
+// Validate signed CSRF token
 const validateSignedCSRFToken = (signedToken: string) => {
     const [csrfToken, signature] = signedToken.split('.');
     if (!csrfToken || !signature) return false;
@@ -55,18 +71,7 @@ const validateSignedCSRFToken = (signedToken: string) => {
     return signature === expectedSignature; // Validate signature
 };
 
-const attachCSRFToken = (req: Request, res: Response, next: NextFunction) => {
-    if (!req.cookies['csrf-token']) {
-        const signedToken = generateSignedCSRFToken();
-        res.cookie('csrf-token', signedToken, {
-            httpOnly: true, 
-            secure: isProduction? true : false, // Use secure cookies in production
-            sameSite: 'strict',
-        });
-    }
-    next();
-};
-
+// Validate CSRF token
 const validateCSRFToken = (req: Request, res: Response, next: NextFunction) => {
     if (req.method === 'GET' || req.method === 'HEAD') {
         return next(); // Skip validation for non-mutating requests
@@ -152,6 +157,32 @@ const generalLimiter = rateLimit({
 
 app.use(generalLimiter);
 
+// Enable HSTS - Strict Transport Security
+app.use(
+    helmet.hsts({
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+    })
+); 
+
+// Prevent MIME type sniffing
+// Adds the X-Content-Type-Options header to prevent browsers from trying to detect
+// (or sniff) the MIME type and forces them to use the declared Content-Type.
+app.use(helmet.noSniff()); 
+
+// Hide Referer header
+// Adds the Referrer-Policy header to control how much referrer information
+// is included with requests.
+app.use(
+    helmet.referrerPolicy({
+        policy: "strict-origin-when-cross-origin",
+    })
+);
+
+// Hide the X-Powered-By header
+app.use(helmet.hidePoweredBy());  
+
 // Content Security Policy (CSP) with helmet
 app.use(
     helmet.contentSecurityPolicy({
@@ -160,7 +191,7 @@ app.use(
             scriptSrc: ["'self'"], // Allow scripts with nonce
             styleSrc: ["'self'"], // Allow styles with nonce
             fontSrc: ["'self'"], // Only allow fonts from your domain
-            imgSrc: ["'self'", 'data:', 'https://*.linodeobjects.com'], // Allow images from Linode Object Storage
+            imgSrc: ["'self'", 'https://instax-bucket.eu-central-1.linodeobjects.com'], // Allow images from Linode
             connectSrc: ["'self'"], // API calls restricted to self
             objectSrc: ["'none'"], // Disallow plugins (e.g., Flash)
             frameSrc: ["'none'"], // Disallow iframe embedding
@@ -174,12 +205,23 @@ app.use(
     })
 );
 
+// Permissions Policy
+// Adds the Permissions-Policy header to control browser features that can be used on your site.
+// For example, geolocation, microphone, and camera permissions are disabled, while fullscreen is restricted to self.
+app.use((req, res, next) => {
+    res.setHeader(
+        'Permissions-Policy',
+        "geolocation=(self), microphone=(), camera=(), fullscreen=(self), payment=()"
+    );
+    next();
+});
+
 // Static files and view engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Attach the CSRF token route
+// CSRF token endpoint
 app.get('/csrf-token', (req, res) => {
     const signedToken = req.cookies['csrf-token'];
     if (!signedToken) {
@@ -191,13 +233,13 @@ app.get('/csrf-token', (req, res) => {
 // Routes
 app.use('/', routes);
 app.use('/users', userRoutes);
-app.use('/posts', postRoutes);
+app.use('/posts', validateCSRFToken, postRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/profile', profileRoutes);
 app.use('/login', loginRoutes);
-app.use('/auth', validateCSRFToken, authRoutes); // Add CSRF validation for protected routes
-app.use('/signup', validateCSRFToken, signUpRoutes);
-app.use('/upload', uploadRoutes);
+app.use('/auth', validateCSRFToken, authRoutes);
+app.use('/signup', signUpRoutes);
+app.use('/upload', validateCSRFToken, uploadRoutes);
 
 // Health check route for docker
 app.get('/health', (req, res) => {

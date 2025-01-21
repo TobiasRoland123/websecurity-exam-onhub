@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminRoleElement = document.getElementById('admin-role');
 
     let currentAdminId = null; // Store the admin's ID for validation
+    let csrfToken = ''; // Store CSRF token
+
 
     // Fetch admin's information
     async function fetchAdminData() {
@@ -20,6 +22,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 adminEmailElement.textContent = data.user.email;
                 adminRoleElement.textContent = data.user.role.charAt(0).toUpperCase() + data.user.role.slice(1);
                 currentAdminId = data.user.id; // Store the admin's ID
+
+                // Fetch CSRF token
+                const csrfResponse = await fetch('/csrf-token', {
+                method: 'GET',
+                credentials: 'include',
+                });
+                if (csrfResponse.ok) {
+                const csrfData = await csrfResponse.json();
+                csrfToken = csrfData.csrfToken; // Save the CSRF token
+                console.log('CSRF token fetched:', csrfToken);
+                } else {
+                throw new Error('Failed to fetch CSRF token');
+                }
+
+                fetchAllUsers();
             } else {
                 console.warn('User not logged in or unauthorized.');
                 window.location.href = '/login';
@@ -90,6 +107,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const response = await fetch(`/users/${userId}`, {
                         method: 'DELETE',
+                        headers: {
+                        'x-csrf-token': csrfToken, // Include CSRF token
+                        },  
                         credentials: 'include'
                     });
 
@@ -109,5 +129,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Call both functions on page load
     fetchAdminData();
-    fetchAllUsers();
 });
